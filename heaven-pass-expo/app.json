@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Heaven Pass",
+    "slug": "heaven-pass",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0A0D16",
+    "splash": {
+      "backgroundColor": "#0A0D16"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.heavenpass.app"
+    },
+    "android": {
+      "package": "com.heavenpass.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0D16"
+      }
+    },
+    "web": {
+      "backgroundColor": "#0A0D16"
+    }
+  }
+}
