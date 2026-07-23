@@ -1,0 +1,29 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "API: Debug (apps/api)",
+      "cwd": "${workspaceFolder}/apps/api",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--import", "tsx"],
+      "program": "${workspaceFolder}/apps/api/src/index.ts",
+      "envFile": "${workspaceFolder}/apps/api/.env",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "API: Debug expire-reservations job",
+      "cwd": "${workspaceFolder}/apps/api",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--import", "tsx"],
+      "program": "${workspaceFolder}/apps/api/src/jobs/run-expire-reservations.ts",
+      "envFile": "${workspaceFolder}/apps/api/.env",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ]
+}

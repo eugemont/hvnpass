@@ -1,0 +1,83 @@
+### Heaven Pass API - colección de pruebas para la extensión "REST Client" de VSCode.
+### Ejecutá cada bloque con el link "Send Request" que aparece arriba de cada ###.
+### Corré el server primero: pnpm --filter @heaven-pass/api dev
+
+@baseUrl = http://localhost:3000
+
+### Health check
+GET {{baseUrl}}/health
+
+### Login dev (crea o reusa un usuario, devuelve un JWT). Solo existe fuera de producción.
+# @name login
+POST {{baseUrl}}/auth/dev-token
+Content-Type: application/json
+
+{
+  "email": "demo@heavenpass.com"
+}
+
+### Catálogo de fiestas (público, no requiere auth)
+GET {{baseUrl}}/events
+
+### Mis membresías
+GET {{baseUrl}}/memberships
+Authorization: Bearer {{login.response.body.$.token}}
+
+### Comprar una membresía VIP
+# @name purchase
+POST {{baseUrl}}/memberships
+Authorization: Bearer {{login.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "plan": "VIP"
+}
+
+### Crear una reserva
+### Reemplazá membershipId (respuesta de "purchase" o "Mis membresías") y eventId (respuesta del catálogo)
+# @name reservation
+POST {{baseUrl}}/reservations
+Authorization: Bearer {{login.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "membershipId": "REEMPLAZAR_CON_UN_ID_REAL",
+  "eventId": "REEMPLAZAR_CON_UN_ID_REAL"
+}
+
+### Confirmar la reserva (mueve reserved -> sold en el EventSlot)
+POST {{baseUrl}}/reservations/{{reservation.response.body.$.id}}/confirm
+Authorization: Bearer {{login.response.body.$.token}}
+
+### Cancelar la reserva
+POST {{baseUrl}}/reservations/{{reservation.response.body.$.id}}/cancel
+Authorization: Bearer {{login.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "reason": "cambio de planes"
+}
+
+### Agregar un extra (late entry, seguro de clima, upgrade)
+POST {{baseUrl}}/reservations/{{reservation.response.body.$.id}}/extras
+Authorization: Bearer {{login.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "type": "LATE_ENTRY"
+}
+
+### Webhook de pago (simula al proveedor confirmando un cargo)
+POST {{baseUrl}}/webhooks/payments
+Content-Type: application/json
+x-webhook-secret: dev-only-change-me-as-well
+
+{
+  "provider": "PAYMENTS",
+  "eventType": "payment.succeeded",
+  "referenceType": "MEMBERSHIP",
+  "referenceId": "REEMPLAZAR_CON_UN_ID_REAL",
+  "amountCents": 79000,
+  "currency": "USD",
+  "occurredAt": "2026-07-23T00:00:00.000Z"
+}
