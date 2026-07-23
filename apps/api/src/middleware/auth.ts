@@ -9,7 +9,7 @@ export interface AuthVariables {
   userRole: UserRole;
 }
 
-const verifyJwt = jwt({ secret: env.JWT_SECRET });
+const verifyJwt = jwt({ secret: env.JWT_SECRET, alg: "HS256" });
 
 /** Verifies the Bearer JWT and exposes `userId` / `userRole` on the context. */
 export const requireAuth = createMiddleware<{ Variables: AuthVariables }>(async (c, next) => {

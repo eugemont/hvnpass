@@ -4,13 +4,7 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "outDir": "dist",
-    "rootDir": "src",
     "types": ["node"]
   },
-  "include": ["src", "prisma/seed.ts"],
-  "references": [
-    { "path": "../../packages/types" },
-    { "path": "../../packages/utils" },
-    { "path": "../../packages/validations" }
-  ]
+  "include": ["src", "prisma/seed.ts"]
 }
