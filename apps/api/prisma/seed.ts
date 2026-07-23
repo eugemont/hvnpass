@@ -88,22 +88,24 @@ async function main() {
     },
   });
 
-  const vipDefinition = MEMBERSHIP_PLANS[MembershipPlan.VIP];
-  await prisma.membership.upsert({
-    where: { id: "seed-demo-membership" },
-    update: {},
-    create: {
-      id: "seed-demo-membership",
-      userId: demoUser.id,
-      plan: MembershipPlan.VIP,
-      status: MembershipStatus.ACTIVE,
-      accessTier: vipDefinition.accessTier,
-      accessesTotal: vipDefinition.accessesIncluded,
-      priceCents: vipDefinition.basePriceCents,
-      currency: vipDefinition.currency,
-      expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
-    },
-  });
+  const existingMembership = await prisma.membership.findFirst({ where: { userId: demoUser.id } });
+  if (!existingMembership) {
+    const vipDefinition = MEMBERSHIP_PLANS[MembershipPlan.VIP];
+    // No custom id here: reservation validation requires a real cuid (see @heaven-pass/validations),
+    // so this must go through Prisma's default id generator like every other membership.
+    await prisma.membership.create({
+      data: {
+        userId: demoUser.id,
+        plan: MembershipPlan.VIP,
+        status: MembershipStatus.ACTIVE,
+        accessTier: vipDefinition.accessTier,
+        accessesTotal: vipDefinition.accessesIncluded,
+        priceCents: vipDefinition.basePriceCents,
+        currency: vipDefinition.currency,
+        expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+      },
+    });
+  }
 
   console.log(`Seeded ${PARTIES.length} events and demo user ${demoUser.email}`);
 }
