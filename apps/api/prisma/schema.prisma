@@ -1,0 +1,222 @@
+// Heaven Pass — Prisma schema
+// Membership plans, party catalog, and concurrency-safe reservations.
+// See apps/api/src/services/reservation.service.ts for the atomic hold logic
+// that keeps EventSlot.sold + EventSlot.reserved <= EventSlot.capacity under load.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  MEMBER
+  STAFF
+  ADMIN
+}
+
+enum MembershipPlan {
+  BASIC
+  VIP
+  BLACK
+}
+
+enum MembershipStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+/// Access tier granted by a membership / offered by an EventSlot.
+enum AccessTier {
+  GENERAL
+  VIP
+  BACKSTAGE
+}
+
+enum EventStatus {
+  SCHEDULED
+  SOLD_OUT
+  CANCELLED
+  COMPLETED
+}
+
+enum ReservationStatus {
+  /// Slot + membership access are held but not yet confirmed; released at holdExpiresAt.
+  PENDING
+  CONFIRMED
+  CANCELLED
+  /// Hold passed holdExpiresAt without confirmation — released by the expiration job.
+  EXPIRED
+  /// Member was scanned in at the door.
+  USED
+}
+
+enum ExtraType {
+  UPGRADE
+  LATE_ENTRY
+  WEATHER_INSURANCE
+  CANCELLATION_FEE
+  TABLE_FACILITATION
+}
+
+enum ExtraStatus {
+  PENDING
+  PAID
+  REFUNDED
+  FAILED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  phone        String?
+  country      String?
+  role         UserRole @default(MEMBER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships  Membership[]
+  reservations Reservation[]
+
+  @@map("users")
+}
+
+model Membership {
+  id                 String           @id @default(cuid())
+  userId             String
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan               MembershipPlan
+  status             MembershipStatus @default(ACTIVE)
+  /// Access tier this membership's accesses grant on EventSlots (BASIC->GENERAL, VIP->VIP, BLACK->BACKSTAGE).
+  accessTier         AccessTier
+  accessesTotal      Int
+  /// Accesses currently held by PENDING/CONFIRMED/USED reservations. Kept <= accessesTotal atomically,
+  /// mirroring the EventSlot sold+reserved<=capacity guard (see reservation.service.ts).
+  accessesUsed       Int              @default(0)
+  priceCents         Int
+  currency           String           @default("USD")
+  /// Counts reservation cancellations against FREE_CANCELLATIONS_PER_MEMBERSHIP before CANCELLATION_FEE applies.
+  cancellationsCount Int              @default(0)
+  freeRescheduleUsed Boolean          @default(false)
+  purchasedAt        DateTime         @default(now())
+  expiresAt           DateTime
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  reservations       Reservation[]
+
+  @@index([userId, status])
+  @@map("memberships")
+}
+
+model Event {
+  id            String      @id @default(cuid())
+  slug          String      @unique
+  name          String
+  description   String
+  venue         String
+  city          String
+  country       String      @default("Uruguay")
+  startsAt      DateTime
+  doorsOpen     DateTime
+  coverImageUrl String?
+  /// Outdoor events are eligible for the WEATHER_INSURANCE extra.
+  isOutdoor     Boolean     @default(true)
+  status        EventStatus @default(SCHEDULED)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  slots         EventSlot[]
+
+  @@index([startsAt])
+  @@map("events")
+}
+
+/// One capacity pool per (event, access tier). Reservations attach here, never directly to Event.
+model EventSlot {
+  id       String   @id @default(cuid())
+  eventId  String
+  event    Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  tier     AccessTier
+  capacity Int
+  /// Confirmed holds. sold + reserved must never exceed capacity.
+  sold     Int      @default(0)
+  /// Pending (unconfirmed) holds still counting against capacity.
+  reserved Int      @default(0)
+  /// Overrides the plan's base price for this event (e.g. Black's variable pricing).
+  priceOverrideCents Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reservations Reservation[]
+
+  @@unique([eventId, tier])
+  @@map("event_slots")
+}
+
+model Reservation {
+  id              String             @id @default(cuid())
+  userId          String
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  membershipId    String
+  membership      Membership         @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  eventSlotId     String
+  eventSlot       EventSlot          @relation(fields: [eventSlotId], references: [id], onDelete: Cascade)
+  accessTier      AccessTier
+  status          ReservationStatus  @default(PENDING)
+  /// Signed token rendered as a QR code in the mobile wallet; verified at the door.
+  qrCode          String             @unique
+  /// Set only while status = PENDING; the expiration job releases holds past this timestamp.
+  holdExpiresAt   DateTime?
+  confirmedAt     DateTime?
+  cancelledAt     DateTime?
+  cancelledReason String?
+  checkedInAt     DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  extras          Extra[]
+
+  @@index([membershipId, status])
+  @@index([eventSlotId, status])
+  @@index([status, holdExpiresAt])
+  @@map("reservations")
+}
+
+/// Additional revenue items: upgrades, late entry, weather insurance, cancellation fees, table facilitation.
+model Extra {
+  id            String      @id @default(cuid())
+  reservationId String
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  type          ExtraType
+  status        ExtraStatus @default(PENDING)
+  amountCents   Int
+  currency      String      @default("USD")
+  metadata      Json?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([reservationId])
+  @@map("extras")
+}
+
+/// Raw log of inbound payment-provider webhooks, kept for auditing/replay before being applied.
+model WebhookEvent {
+  id            String    @id @default(cuid())
+  provider      String
+  eventType     String
+  referenceType String
+  referenceId   String
+  payload       Json
+  processedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([provider, eventType])
+  @@map("webhook_events")
+}
